@@ -1,0 +1,6 @@
+{
+    "terminal.integrated.env.linux": {
+        "PATH": "/home/hedenius/.platformio/penv/bin:/home/hedenius/.platformio/penv:/home/hedenius/bin:/home/hedenius/.local/bin:/home/hedenius/.nvm/versions/node/v8.6.0/bin:/home/hedenius/bin:/home/hedenius/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/usr/bin/micro:/snap/bin:/usr/lib/jvm/java-9-oracle/bin:/usr/lib/jvm/java-9-oracle/db/bin:/usr/lib/jvm/java-9-oracle/bin:/usr/lib/jvm/java-9-oracle/db/bin",
+        "PLATFORMIO_CALLER": "vscode"
+    }
+}
