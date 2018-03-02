@@ -1,6 +1,10 @@
 #include <Arduino.h>
 #include <CurieBLE.h>
 
+#define UUID4_SERVICE "d68b43f7-dbdf-4496-badb-0c59f8e7a5ac"
+#define UUID4_DISTANCE "250416ca-a580-4a39-959d-32bdab46403b"
+#define UUID4_LED "5377a75b-0b55-41f2-a415-bcf8e7510921"
+
 #define LED_PIN  13 // Built in LED-pin, used to show that BLE central is connected.
 #define TRIG_PIN 12 // Arduino pin connected to sensor trigger pin
 #define ECHO_PIN 11 // Arduino pin connected to sensor echo pin
@@ -11,6 +15,7 @@
 #define MICROS_ROUNDTRIP_CM 58.2 // Time it takes for sound to travel 2cm in micros
 
 #define NO_ECHO 0 // Default value for no sensor reading
+#define LED_OFF 0
 
 #define DISTANCE_POLL_TIME_MS 250 // Poll sensor 4 times a second
 
@@ -19,6 +24,8 @@
 #define WAIT_FOR_HIGH 10
 
 unsigned int pingDistanceCm(); // Prototype needed if using .cpp instead of .ino
+void turnOnLeds();
+void turnOffLeds();
 
 // Variables for distance sensor
 unsigned long max_echo_time = (MAX_DISTANCE_CM) * MICROS_ROUNDTRIP_CM; // micros
@@ -27,8 +34,9 @@ unsigned int oldDistance = 0;
 
 // Variables for BLE
 BLEPeripheral blePeripheral;
-BLEService luciaService("d68b43f7-dbdf-4496-badb-0c59f8e7a5ac");
-BLEUnsignedIntCharacteristic distanceCharacteristic("d68b43f7-dbdf-4496-badb-0c59f8e7a5ac", BLERead | BLENotify);
+BLEService luciaService(UUID4_SERVICE);
+BLEUnsignedIntCharacteristic distanceCharacteristic(UUID4_DISTANCE, BLERead | BLENotify);
+BLEUnsignedCharCharacteristic ledCharacteristic(UUID4_LED, BLERead | BLEWrite);
 
 void setup() {
     Serial.begin(9600);
@@ -42,8 +50,10 @@ void setup() {
 
     blePeripheral.addAttribute(luciaService);
     blePeripheral.addAttribute(distanceCharacteristic);
+    blePeripheral.addAttribute(ledCharacteristic);
 
     distanceCharacteristic.setValue(NO_ECHO);
+    ledCharacteristic.setValue(LED_OFF);
 
     blePeripheral.begin();
     Serial.println("Bluetooth active, waiting for connections.");
@@ -74,6 +84,15 @@ void loop() {
                     oldDistance = distance;
                 }
             }
+
+            if (ledCharacteristic.written()) {
+                if (ledCharacteristic.value()) {
+                    turnOnLeds();
+                }
+                else {
+                    turnOffLeds();
+                }
+            }
         }
 
         digitalWrite(LED_PIN, LOW);
@@ -95,3 +114,12 @@ unsigned int pingDistanceCm() {
 
     return duration > max_echo_time ? NO_ECHO : duration / MICROS_ROUNDTRIP_CM;
 }
+
+void turnOnLeds() {
+    Serial.println("LEDS ON");
+}
+
+void turnOffLeds() {
+    Serial.println("LEDS OFF");
+}
+
