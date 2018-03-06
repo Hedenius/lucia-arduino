@@ -4,6 +4,7 @@
 #define UUID4_SERVICE "d68b43f7-dbdf-4496-badb-0c59f8e7a5ac"
 #define UUID4_DISTANCE "250416ca-a580-4a39-959d-32bdab46403b"
 #define UUID4_LED "5377a75b-0b55-41f2-a415-bcf8e7510921"
+#define UUID4_VIBRATE "c88f5ba0-dee3-4d6c-8e33-38ad5261cc85"
 
 #define LED_PIN  13 // Built in LED-pin, used to show that BLE central is connected.
 #define TRIG_PIN 12 // Arduino pin connected to sensor trigger pin
@@ -15,7 +16,7 @@
 #define MICROS_ROUNDTRIP_CM 58.2 // Time it takes for sound to travel 2cm in micros
 
 #define NO_ECHO 0 // Default value for no sensor reading
-#define LED_OFF 0
+#define OFF 0
 
 #define DISTANCE_POLL_TIME_MS 250 // Poll sensor 4 times a second
 
@@ -26,6 +27,8 @@
 unsigned int pingDistanceCm(); // Prototype needed if using .cpp instead of .ino
 void turnOnLeds();
 void turnOffLeds();
+void turnOnVibration();
+void turnOffVibration();
 
 // Variables for distance sensor
 unsigned long max_echo_time = MAX_DISTANCE_CM * MICROS_ROUNDTRIP_CM; // micros
@@ -37,6 +40,7 @@ BLEPeripheral blePeripheral;
 BLEService luciaService(UUID4_SERVICE);
 BLEUnsignedIntCharacteristic distanceCharacteristic(UUID4_DISTANCE, BLERead | BLENotify);
 BLEUnsignedCharCharacteristic ledCharacteristic(UUID4_LED, BLERead | BLEWrite);
+BLEUnsignedCharCharacteristic vibrateCharacteristic(UUID4_VIBRATE, BLERead | BLEWrite);
 
 void setup() {
     Serial.begin(9600);
@@ -51,9 +55,11 @@ void setup() {
     blePeripheral.addAttribute(luciaService);
     blePeripheral.addAttribute(distanceCharacteristic);
     blePeripheral.addAttribute(ledCharacteristic);
+    blePeripheral.addAttribute(vibrateCharacteristic);
 
     distanceCharacteristic.setValue(NO_ECHO);
-    ledCharacteristic.setValue(LED_OFF);
+    ledCharacteristic.setValue(OFF);
+    vibrateCharacteristic.setValue(OFF);
 
     blePeripheral.begin();
     Serial.println("Bluetooth active, waiting for connections.");
@@ -81,10 +87,10 @@ void loop() {
                 Serial.print(distance);
                 Serial.println("cm");
 
-                if (distance != oldDistance) { 
+                //if (distance != oldDistance) { 
                     distanceCharacteristic.setValue(distance);
-                    oldDistance = distance;
-                }
+                    //oldDistance = distance;
+                //}
             }
 
             if (ledCharacteristic.written()) {
@@ -93,6 +99,15 @@ void loop() {
                 }
                 else {
                     turnOffLeds();
+                }
+            }
+
+            if (vibrateCharacteristic.written()) {
+                if (vibrateCharacteristic.value()) {
+                    turnOnVibration();
+                }
+                else {
+                    turnOffVibration();
                 }
             }
         }
@@ -123,5 +138,13 @@ void turnOnLeds() {
 
 void turnOffLeds() {
     Serial.println("LEDS OFF");
+}
+
+void turnOnVibration() {
+    Serial.println("VIBRATION ON");
+}
+
+void turnOffVibration() {
+    Serial.println("VIBRATION OFF");
 }
 
