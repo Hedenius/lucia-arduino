@@ -102,7 +102,11 @@ void loop() {
                 }
             }
 
+<<<<<<< HEAD
             if (vibrateCharacteristic.written()) {
+=======
+            if (vibrateCharacteristic.writen()) {
+>>>>>>> c0628f209786a9a7ef119508b02eab62dc725504
                 if (vibrateCharacteristic.value()) {
                     turnOnVibration();
                 }
