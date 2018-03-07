@@ -5,10 +5,14 @@
 #define UUID4_DISTANCE "250416ca-a580-4a39-959d-32bdab46403b"
 #define UUID4_LED "5377a75b-0b55-41f2-a415-bcf8e7510921"
 #define UUID4_VIBRATE "c88f5ba0-dee3-4d6c-8e33-38ad5261cc85"
+#define UUID4_SENSOR "b4ded119-98a3-4a4c-a001-015ce5142cc1"
+#define UUID4_LIGHT "77198360-91bb-421b-9626-564a5c3704f8"
 
-#define LED_PIN  13 // Built in LED-pin, used to show that BLE central is connected.
+#define BUILTIN_LED_PIN 13 // Built in LED-pin, used to show that BLE central is connected.
 #define TRIG_PIN 12 // Arduino pin connected to sensor trigger pin
 #define ECHO_PIN 11 // Arduino pin connected to sensor echo pin
+#define LED_PIN 10 // Arduino pin connected to led
+#define PHOTOCELL_ANALOG_PIN 0 // Arduino analog connected to photocell 
 
 #define HCSR04_MAX_DISTANCE_CM 400 // Max distance according to datasheet
 #define MAX_DISTANCE_CM 200 // Max distance we want to ping for
@@ -17,8 +21,14 @@
 
 #define NO_ECHO 0 // Default value for no sensor reading
 #define OFF 0
+#define ON 1
+#define LIGHT 0
+#define DARK 1
+
+#define LIGHT_THRESHOLD_LUX 100
 
 #define DISTANCE_POLL_TIME_MS 250 // Poll sensor 4 times a second
+#define LIGHT_POLL_TIME_MS 5000 // Poll photocell every 5 seconds
 
 // Time in micros to wait after a digital write to make sure pin is low or high. 
 #define WAIT_FOR_LOW 4
@@ -30,21 +40,29 @@ void turnOffLeds();
 void turnOnVibration();
 void turnOffVibration();
 
+unsigned char isSensorOn = ON;
+
 // Variables for distance sensor
 unsigned long max_echo_time = MAX_DISTANCE_CM * MICROS_ROUNDTRIP_CM; // micros
-unsigned long previousPollTime = 0; // millis
+unsigned long previousDistancePollTime = 0; // millis
+unsigned long previousLightPollTime = 0;
+
 unsigned int oldDistance = 0;
+unsigned int oldPhotocellValue = 0;
 
 // Variables for BLE
 BLEPeripheral blePeripheral;
 BLEService luciaService(UUID4_SERVICE);
 BLEUnsignedIntCharacteristic distanceCharacteristic(UUID4_DISTANCE, BLERead | BLENotify);
-BLEUnsignedCharCharacteristic ledCharacteristic(UUID4_LED, BLERead | BLEWrite);
+BLEUnsignedCharCharacteristic ledCharacteristic(UUID4_LED, BLERead | BLEWrite | BLENotify);
 BLEUnsignedCharCharacteristic vibrateCharacteristic(UUID4_VIBRATE, BLERead | BLEWrite);
+BLEUnsignedCharCharacteristic sensorCharacteristic(UUID4_SENSOR, BLERead | BLEWrite | BLENotify);
+BLEUnsignedCharCharacteristic lightCharacteristic(UUID4_LIGHT, BLERead | BLEWrite | BLENotify);
 
 void setup() {
     Serial.begin(9600);
 
+    pinMode(BUILTIN_LED_PIN, OUTPUT);
     pinMode(LED_PIN, OUTPUT);
     pinMode(TRIG_PIN, OUTPUT);
     pinMode(ECHO_PIN, INPUT);
@@ -56,10 +74,12 @@ void setup() {
     blePeripheral.addAttribute(distanceCharacteristic);
     blePeripheral.addAttribute(ledCharacteristic);
     blePeripheral.addAttribute(vibrateCharacteristic);
+    blePeripheral.addAttribute(sensorCharacteristic);
 
     distanceCharacteristic.setValue(NO_ECHO);
     ledCharacteristic.setValue(OFF);
     vibrateCharacteristic.setValue(OFF);
+    sensorCharacteristic.setValue(ON);
 
     blePeripheral.begin();
     Serial.println("Bluetooth active, waiting for connections.");
@@ -73,24 +93,51 @@ void loop() {
     if (central) {
         Serial.print("Connected to central: ");
         Serial.println(central.address());
-        digitalWrite(LED_PIN, HIGH);
+        digitalWrite(BUILTIN_LED_PIN, HIGH);
         
         while (central.connected()) {
             long currentTime = millis();
             
-            if (currentTime - previousPollTime >= DISTANCE_POLL_TIME_MS) {
-                previousPollTime = currentTime;
+            if (isSensorOn) {
+                if (currentTime - previousDistancePollTime >= DISTANCE_POLL_TIME_MS) {
+                    previousDistancePollTime = currentTime;
 
-                unsigned int distance = pingDistanceCm();
-                
-                Serial.print("Distance: ");
-                Serial.print(distance);
-                Serial.println("cm");
+                    unsigned int distance = pingDistanceCm();
+                    
+                    Serial.print("Distance: ");
+                    Serial.print(distance);
+                    Serial.println("cm");
 
-                //if (distance != oldDistance) { 
                     distanceCharacteristic.setValue(distance);
-                    //oldDistance = distance;
-                //}
+
+                    //if (distance != oldDistance) { 
+                        //distanceCharacteristic.setValue(distance);
+                        //oldDistance = distance;
+                    //}
+                }
+            }
+            
+            if (currentTime - previousLightPollTime >= LIGHT_POLL_TIME_MS) {
+                int photocellValue = analogRead(PHOTOCELL_ANALOG_PIN);
+                
+                if (oldPhotocellValue != photocellValue) {
+                    if (photocellValue < LIGHT_THRESHOLD_LUX) {
+                        lightCharacteristic.setValue(DARK);
+                    }
+                    else {
+                        lightCharacteristic.setValue(LIGHT);
+                    }
+                }
+            }
+            
+            if (sensorCharacteristic.written()) {
+                isSensorOn = sensorCharacteristic.value();
+                if (isSensorOn) {
+                    Serial.println("SENSOR ON");
+                }
+                else {
+                    Serial.println("SENSOR OFF");
+                }
             }
 
             if (ledCharacteristic.written()) {
@@ -102,11 +149,7 @@ void loop() {
                 }
             }
 
-<<<<<<< HEAD
             if (vibrateCharacteristic.written()) {
-=======
-            if (vibrateCharacteristic.writen()) {
->>>>>>> c0628f209786a9a7ef119508b02eab62dc725504
                 if (vibrateCharacteristic.value()) {
                     turnOnVibration();
                 }
@@ -116,7 +159,7 @@ void loop() {
             }
         }
 
-        digitalWrite(LED_PIN, LOW);
+        digitalWrite(BUILTIN_LED_PIN, LOW);
         Serial.print("Disconnected from central: ");
         Serial.println(central.address());
     }
@@ -137,10 +180,12 @@ unsigned int pingDistanceCm() {
 }
 
 void turnOnLeds() {
+    digitalWrite(LED_PIN, HIGH);
     Serial.println("LEDS ON");
 }
 
 void turnOffLeds() {
+    digitalWrite(LED_PIN, LOW);
     Serial.println("LEDS OFF");
 }
 
