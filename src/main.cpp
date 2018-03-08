@@ -41,8 +41,6 @@
 unsigned int pingDistanceCm(); // Prototype needed if using .cpp instead of .ino
 void turnOnLeds();
 void turnOffLeds();
-void turnOnVibration();
-void turnOffVibration();
 
 unsigned char isSensorOn = ON;
 
@@ -59,7 +57,6 @@ BLEPeripheral blePeripheral;
 BLEService luciaService(UUID4_SERVICE);
 BLEUnsignedIntCharacteristic distanceCharacteristic(UUID4_DISTANCE, BLERead | BLENotify);
 BLEUnsignedCharCharacteristic ledCharacteristic(UUID4_LED, BLERead | BLEWrite | BLENotify);
-BLEUnsignedCharCharacteristic vibrateCharacteristic(UUID4_VIBRATE, BLERead | BLEWrite);
 BLEUnsignedCharCharacteristic sensorCharacteristic(UUID4_SENSOR, BLERead | BLEWrite | BLENotify);
 BLEUnsignedCharCharacteristic lightCharacteristic(UUID4_LIGHT, BLERead | BLEWrite | BLENotify);
 
@@ -78,13 +75,11 @@ void setup() {
     blePeripheral.addAttribute(luciaService);
     blePeripheral.addAttribute(distanceCharacteristic);
     blePeripheral.addAttribute(ledCharacteristic);
-    blePeripheral.addAttribute(vibrateCharacteristic);
     blePeripheral.addAttribute(sensorCharacteristic);
     blePeripheral.addAttribute(lightCharacteristic);
 
     distanceCharacteristic.setValue(NO_ECHO);
     ledCharacteristic.setValue(OFF);
-    vibrateCharacteristic.setValue(OFF);
     sensorCharacteristic.setValue(ON);
     lightCharacteristic.setValue(LIGHT);
 
@@ -135,10 +130,14 @@ void loop() {
                 
                 if (oldPhotocellValue != photocellValue) {
                     if (photocellValue < LIGHT_RAW_THRESHOLD) {
-                        lightCharacteristic.setValue(DARK);
+                        if (lightCharacteristic.value() != DARK) {
+                            lightCharacteristic.setValue(DARK);
+                        }
                     }
                     else {
-                        lightCharacteristic.setValue(LIGHT);
+                        if (lightCharacteristic.value() != LIGHT) {
+                            lightCharacteristic.setValue(LIGHT);
+                        }
                     }
                 }
             }
@@ -159,15 +158,6 @@ void loop() {
                 }
                 else {
                     turnOffLeds();
-                }
-            }
-
-            if (vibrateCharacteristic.written()) {
-                if (vibrateCharacteristic.value()) {
-                    turnOnVibration();
-                }
-                else {
-                    turnOffVibration();
                 }
             }
         }
@@ -200,13 +190,5 @@ void turnOnLeds() {
 void turnOffLeds() {
     digitalWrite(LED_PIN, LOW);
     Serial.println("LEDS OFF");
-}
-
-void turnOnVibration() {
-    Serial.println("VIBRATION ON");
-}
-
-void turnOffVibration() {
-    Serial.println("VIBRATION OFF");
 }
 
