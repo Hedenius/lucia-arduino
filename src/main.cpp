@@ -9,8 +9,8 @@
 #define UUID4_LIGHT "77198360-91bb-421b-9626-564a5c3704f8"
 
 #define BUILTIN_LED_PIN 13 // Built in LED-pin, used to show that BLE central is connected.
-#define TRIG_PIN 12 // Arduino pin connected to sensor trigger pin
-#define ECHO_PIN 11 // Arduino pin connected to sensor echo pin
+#define TRIG_PIN 11 // Arduino pin connected to sensor trigger pin
+#define ECHO_PIN 12 // Arduino pin connected to sensor echo pin
 #define LED_PIN 10 // Arduino pin connected to led
 #define PHOTOCELL_ANALOG_PIN 0 // Arduino analog connected to photocell 
 
@@ -25,7 +25,7 @@
 #define LIGHT 0
 #define DARK 1
 
-#define LIGHT_THRESHOLD_LUX 100
+#define LIGHT_THRESHOLD 100
 
 #define DISTANCE_POLL_TIME_MS 250 // Poll sensor 4 times a second
 #define LIGHT_POLL_TIME_MS 5000 // Poll photocell every 5 seconds
@@ -66,6 +66,7 @@ void setup() {
     pinMode(LED_PIN, OUTPUT);
     pinMode(TRIG_PIN, OUTPUT);
     pinMode(ECHO_PIN, INPUT);
+    pinMode(PHOTOCELL_ANALOG_PIN, INPUT);
 
     blePeripheral.setLocalName("Lucia");
     blePeripheral.setAdvertisedServiceUuid(luciaService.uuid());
@@ -75,11 +76,13 @@ void setup() {
     blePeripheral.addAttribute(ledCharacteristic);
     blePeripheral.addAttribute(vibrateCharacteristic);
     blePeripheral.addAttribute(sensorCharacteristic);
+    blePeripheral.addAttribute(lightCharacteristic);
 
     distanceCharacteristic.setValue(NO_ECHO);
     ledCharacteristic.setValue(OFF);
     vibrateCharacteristic.setValue(OFF);
     sensorCharacteristic.setValue(ON);
+    lightCharacteristic.setValue(LIGHT);
 
     blePeripheral.begin();
     Serial.println("Bluetooth active, waiting for connections.");
@@ -118,10 +121,15 @@ void loop() {
             }
             
             if (currentTime - previousLightPollTime >= LIGHT_POLL_TIME_MS) {
-                int photocellValue = analogRead(PHOTOCELL_ANALOG_PIN);
+                previousLightPollTime = currentTime;
+
+                unsigned int photocellValue = analogRead(PHOTOCELL_ANALOG_PIN);
+                
+                Serial.print("Photocell: ");
+                Serial.println(photocellValue);
                 
                 if (oldPhotocellValue != photocellValue) {
-                    if (photocellValue < LIGHT_THRESHOLD_LUX) {
+                    if (photocellValue < LIGHT_THRESHOLD) {
                         lightCharacteristic.setValue(DARK);
                     }
                     else {
