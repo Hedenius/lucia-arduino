@@ -17,6 +17,10 @@
 #define HCSR04_MAX_DISTANCE_CM 400 // Max distance according to datasheet
 #define MAX_DISTANCE_CM 200 // Max distance we want to ping for
 
+#define MAX_ADC_READING 1023
+#define ADC_REF_VOLTAGE 5.0
+#define REF_RESISTANCE 1000
+
 #define MICROS_ROUNDTRIP_CM 58.2 // Time it takes for sound to travel 2cm in micros
 
 #define NO_ECHO 0 // Default value for no sensor reading
@@ -25,10 +29,10 @@
 #define LIGHT 0
 #define DARK 1
 
-#define LIGHT_THRESHOLD 100
+#define LIGHT_RAW_THRESHOLD 200
 
 #define DISTANCE_POLL_TIME_MS 250 // Poll sensor 4 times a second
-#define LIGHT_POLL_TIME_MS 5000 // Poll photocell every 5 seconds
+#define LIGHT_POLL_TIME_MS 1000 // Poll photocell every 5 seconds
 
 // Time in micros to wait after a digital write to make sure pin is low or high. 
 #define WAIT_FOR_LOW 4
@@ -124,12 +128,13 @@ void loop() {
                 previousLightPollTime = currentTime;
 
                 unsigned int photocellValue = analogRead(PHOTOCELL_ANALOG_PIN);
-                
-                Serial.print("Photocell: ");
-                Serial.println(photocellValue);
+
+                float resistorVoltage = (float) photocellValue / MAX_ADC_READING * ADC_REF_VOLTAGE;
+                float ldrVoltage = ADC_REF_VOLTAGE - resistorVoltage;
+                float ldrResistance = ldrVoltage/resistorVoltage * REF_RESISTANCE;
                 
                 if (oldPhotocellValue != photocellValue) {
-                    if (photocellValue < LIGHT_THRESHOLD) {
+                    if (photocellValue < LIGHT_RAW_THRESHOLD) {
                         lightCharacteristic.setValue(DARK);
                     }
                     else {
