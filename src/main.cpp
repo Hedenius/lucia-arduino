@@ -17,22 +17,18 @@
 #define HCSR04_MAX_DISTANCE_CM 400 // Max distance according to datasheet
 #define MAX_DISTANCE_CM 200 // Max distance we want to ping for
 
-#define MAX_ADC_READING 1023
-#define ADC_REF_VOLTAGE 5.0
-#define REF_RESISTANCE 1000
+// #define MAX_ADC_READING 1023
+// #define ADC_REF_VOLTAGE 5.0
+// #define REF_RESISTANCE 1000
 
 #define MICROS_ROUNDTRIP_CM 58.2 // Time it takes for sound to travel 2cm in micros
 
 #define NO_ECHO 0 // Default value for no sensor reading
 #define OFF 0
 #define ON 1
-#define LIGHT 0
-#define DARK 1
-
-#define LIGHT_RAW_THRESHOLD 200
 
 #define DISTANCE_POLL_TIME_MS 250 // Poll sensor 4 times a second
-#define LIGHT_POLL_TIME_MS 1000 // Poll photocell every 5 seconds
+#define LIGHT_POLL_TIME_MS 1000 // Poll photocell every 1 second
 
 // Time in micros to wait after a digital write to make sure pin is low or high. 
 #define WAIT_FOR_LOW 4
@@ -42,23 +38,21 @@ unsigned int pingDistanceCm(); // Prototype needed if using .cpp instead of .ino
 void turnOnLeds();
 void turnOffLeds();
 
-unsigned char isSensorOn = ON;
+unsigned char isDistanceSensorOn = ON;
 
 // Variables for distance sensor
 unsigned long max_echo_time = MAX_DISTANCE_CM * MICROS_ROUNDTRIP_CM; // micros
 unsigned long previousDistancePollTime = 0; // millis
 unsigned long previousLightPollTime = 0;
 
-unsigned int oldDistance = 0;
-unsigned int oldPhotocellValue = 0;
-
 // Variables for BLE
 BLEPeripheral blePeripheral;
+
 BLEService luciaService(UUID4_SERVICE);
 BLEUnsignedIntCharacteristic distanceCharacteristic(UUID4_DISTANCE, BLERead | BLENotify);
-BLEUnsignedCharCharacteristic ledCharacteristic(UUID4_LED, BLERead | BLEWrite | BLENotify);
-BLEUnsignedCharCharacteristic sensorCharacteristic(UUID4_SENSOR, BLERead | BLEWrite | BLENotify);
-BLEUnsignedCharCharacteristic lightCharacteristic(UUID4_LIGHT, BLERead | BLEWrite | BLENotify);
+BLEUnsignedIntCharacteristic lightCharacteristic(UUID4_LIGHT, BLERead | BLENotify);
+BLEUnsignedCharCharacteristic ledCharacteristic(UUID4_LED, BLERead | BLEWrite);
+BLEUnsignedCharCharacteristic sensorCharacteristic(UUID4_SENSOR, BLERead | BLEWrite);
 
 void setup() {
     Serial.begin(9600);
@@ -76,12 +70,12 @@ void setup() {
     blePeripheral.addAttribute(distanceCharacteristic);
     blePeripheral.addAttribute(ledCharacteristic);
     blePeripheral.addAttribute(sensorCharacteristic);
-    blePeripheral.addAttribute(lightCharacteristic);
+    blePeripheral.addAttribute(lightCharacteristic);    
 
     distanceCharacteristic.setValue(NO_ECHO);
     ledCharacteristic.setValue(OFF);
     sensorCharacteristic.setValue(ON);
-    lightCharacteristic.setValue(LIGHT);
+    lightCharacteristic.setValue(0);
 
     blePeripheral.begin();
     Serial.println("Bluetooth active, waiting for connections.");
@@ -100,7 +94,7 @@ void loop() {
         while (central.connected()) {
             long currentTime = millis();
             
-            if (isSensorOn) {
+            if (isDistanceSensorOn) {
                 if (currentTime - previousDistancePollTime >= DISTANCE_POLL_TIME_MS) {
                     previousDistancePollTime = currentTime;
 
@@ -111,11 +105,6 @@ void loop() {
                     Serial.println("cm");
 
                     distanceCharacteristic.setValue(distance);
-
-                    //if (distance != oldDistance) { 
-                        //distanceCharacteristic.setValue(distance);
-                        //oldDistance = distance;
-                    //}
                 }
             }
             
@@ -124,27 +113,15 @@ void loop() {
 
                 unsigned int photocellValue = analogRead(PHOTOCELL_ANALOG_PIN);
 
-                float resistorVoltage = (float) photocellValue / MAX_ADC_READING * ADC_REF_VOLTAGE;
-                float ldrVoltage = ADC_REF_VOLTAGE - resistorVoltage;
-                float ldrResistance = ldrVoltage/resistorVoltage * REF_RESISTANCE;
-                
-                if (oldPhotocellValue != photocellValue) {
-                    if (photocellValue < LIGHT_RAW_THRESHOLD) {
-                        if (lightCharacteristic.value() != DARK) {
-                            lightCharacteristic.setValue(DARK);
-                        }
-                    }
-                    else {
-                        if (lightCharacteristic.value() != LIGHT) {
-                            lightCharacteristic.setValue(LIGHT);
-                        }
-                    }
-                }
+                Serial.print("Photocell:");
+                Serial.println(photocellValue);
+
+                lightCharacteristic.setValue(photocellValue);
             }
             
             if (sensorCharacteristic.written()) {
-                isSensorOn = sensorCharacteristic.value();
-                if (isSensorOn) {
+                isDistanceSensorOn = sensorCharacteristic.value();
+                if (isDistanceSensorOn) {
                     Serial.println("SENSOR ON");
                 }
                 else {
