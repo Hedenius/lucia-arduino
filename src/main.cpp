@@ -200,30 +200,18 @@ unsigned int pingDistanceCm() {
 }
 
 void switchOffMotor() {
-    if (vibrationMotorCharacteristic.value()) {
-        vibrationMotorCharacteristic.setValue(OFF);
-    }
-
     analogWrite(VIBRATION_MOTOR_PIN, LOW);
     isVibrating = OFF;
     Serial.println("Vibrating OFF");
 }
 
 void switchOnMotor() {
-    if (!vibrationMotorCharacteristic.value()) {
-        vibrationMotorCharacteristic.setValue(ON);
-    }
-
     analogWrite(VIBRATION_MOTOR_PIN, 100); // max 153, but it's way too hysterical
     isVibrating = ON;
     Serial.println("Vibrating ON");
 }
 
 void silentMotor() {
-    if (vibrationMotorCharacteristic.value()) {
-        vibrationMotorCharacteristic.setValue(ON);
-    }
-
     analogWrite(VIBRATION_MOTOR_PIN, LOW);
     isVibrating = OFF;
     Serial.println("Vibrating OFF: Object either too close or too far");
