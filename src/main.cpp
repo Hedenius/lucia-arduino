@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <CurieBLE.h>
+
 #define UUID4_SERVICE "d68b43f7-dbdf-4496-badb-0c59f8e7a5ac"
 #define UUID4_DISTANCE "250416ca-a580-4a39-959d-32bdab46403b"
 #define UUID4_LED "5377a75b-0b55-41f2-a415-bcf8e7510921"
@@ -33,6 +34,9 @@
 unsigned int pingDistanceCm(); // Prototype needed if using .cpp instead of .ino
 void turnOnLeds();
 void turnOffLeds();
+void switchOnMotor();
+void switchOffMotor();
+void silentMotor();
 
 unsigned char isDistanceSensorOn = ON;
 unsigned char isVibrationOn = ON;
@@ -47,6 +51,7 @@ unsigned long vibrationMotorInterval = 0; // the value based on proximity
 
 // Variables for BLE
 BLEPeripheral blePeripheral;
+
 BLEService luciaService(UUID4_SERVICE);
 BLEUnsignedIntCharacteristic distanceCharacteristic(UUID4_DISTANCE, BLERead | BLENotify);
 BLEUnsignedIntCharacteristic lightCharacteristic(UUID4_LIGHT, BLERead | BLENotify);
@@ -63,25 +68,27 @@ void setup() {
     pinMode(ECHO_PIN, INPUT);
     pinMode(PHOTOCELL_ANALOG_PIN, INPUT);
     pinMode(VIBRATION_MOTOR_PIN, OUTPUT);
-    
+
     blePeripheral.setLocalName("Lucia");
     blePeripheral.setAdvertisedServiceUuid(luciaService.uuid());
+
     blePeripheral.addAttribute(luciaService);
     blePeripheral.addAttribute(distanceCharacteristic);
     blePeripheral.addAttribute(ledCharacteristic);
     blePeripheral.addAttribute(sensorCharacteristic);
     blePeripheral.addAttribute(lightCharacteristic);    
     blePeripheral.addAttribute(vibrationMotorCharacteristic);   
-    
+
     distanceCharacteristic.setValue(NO_ECHO);
     ledCharacteristic.setValue(OFF);
     sensorCharacteristic.setValue(ON);
     lightCharacteristic.setValue(0);
     vibrationMotorCharacteristic.setValue(ON); // ?? needed ??
-    
+
     blePeripheral.begin();
     Serial.println("Bluetooth active, waiting for connections.");
 }
+
 void loop() {
     blePeripheral.poll(); // not sure if this is needed if we're not using an event based approach...
     
@@ -94,26 +101,39 @@ void loop() {
         
         while (central.connected()) {
             long currentTime = millis();
+
+            if (sensorCharacteristic.written()) {
+              if (sensorCharacteristic.value()) {
+                isDistanceSensorOn = ON;
+                Serial.println("SENSOR ON");
+              } else {
+                isDistanceSensorOn = OFF;
+                Serial.println("SENSOR OFF");
+                // switch off vibration if the motor is on 
+                switchOffMotor();
+              }
+            }
             
             if (isDistanceSensorOn) {
                 if (currentTime - previousDistancePollTime >= DISTANCE_POLL_TIME_MS) {
                     previousDistancePollTime = currentTime;
+
                     unsigned int distance = pingDistanceCm();
                     vibrationMotorInterval = distance * 10;
                     
                     Serial.print("Distance: ");
                     Serial.print(distance);
                     Serial.println("cm");
+
                     distanceCharacteristic.setValue(distance);
                 }
             }
-            
+
             if (vibrationMotorCharacteristic.written()) {
                 if (vibrationMotorCharacteristic.value()) {
                     isVibrationOn = ON;
                     Serial.println("Vibration function switched on");
-                } 
-                else {
+                } else {
                     isVibrationOn = OFF;
                     analogWrite(VIBRATION_MOTOR_PIN, 0);
                     isVibrating = OFF;
@@ -121,46 +141,32 @@ void loop() {
                 }
             }
 
-            if (isVibrationOn) {
-                if (currentTime - vibrationMotorBreakpoint >= vibrationMotorInterval) {
-                    vibrationMotorBreakpoint = currentTime;
-                    if (vibrationMotorInterval == 0) {
-                        analogWrite(VIBRATION_MOTOR_PIN, 0);
-                        isVibrating = OFF;
-                        Serial.println("Vibrating OFF: Object either too close or too far");
-                    } 
-                    else {
-                        if (isVibrating) {
-                             analogWrite(VIBRATION_MOTOR_PIN, 0);
-                             isVibrating = OFF;
-                             Serial.println("Vibrating OFF");
-                        } 
-                        else {
-                            analogWrite(VIBRATION_MOTOR_PIN, 100); // max 153, but it's way too hysterical
-                            isVibrating = ON;
-                            Serial.println("Vibrating ON");
-                        }
-                    }
+            if (isVibrationOn & isDistanceSensorOn) {
+              if (currentTime - vibrationMotorBreakpoint >= vibrationMotorInterval) {
+                vibrationMotorBreakpoint = currentTime;
+                if (vibrationMotorInterval == 0) {
+                  silentMotor();
+                } else {
+                  if (isVibrating) {
+                    switchOffMotor();
+                  } else {
+                    switchOnMotor();
+                  }
                 }
+              }
             }
-            
+
             if (currentTime - previousLightPollTime >= LIGHT_POLL_TIME_MS) {
                 previousLightPollTime = currentTime;
+
                 unsigned int photocellValue = analogRead(PHOTOCELL_ANALOG_PIN);
+
                 Serial.print("Photocell:");
                 Serial.println(photocellValue);
+
                 lightCharacteristic.setValue(photocellValue);
             }
-            
-            if (sensorCharacteristic.written()) {
-                isDistanceSensorOn = sensorCharacteristic.value();
-                if (isDistanceSensorOn) {
-                    Serial.println("SENSOR ON");
-                }
-                else {
-                    Serial.println("SENSOR OFF");
-                }
-            }
+
             if (ledCharacteristic.written()) {
                 if (ledCharacteristic.value()) {
                     turnOnLeds();
@@ -170,12 +176,15 @@ void loop() {
                 }
             }
         }
-        analogWrite(VIBRATION_MOTOR_PIN, 0);
+
         digitalWrite(BUILTIN_LED_PIN, LOW);
+        switchOffMotor();
+        turnOffLeds();
         Serial.print("Disconnected from central: ");
         Serial.println(central.address());
     }
 }
+
 unsigned int pingDistanceCm() {
     // Trigger sensor
     digitalWrite(TRIG_PIN, LOW);
@@ -186,13 +195,54 @@ unsigned int pingDistanceCm() {
 
     // Wait for pulse and get time in micros
     unsigned long duration = pulseIn(ECHO_PIN, HIGH);
+
     return duration > max_echo_time ? NO_ECHO : duration / MICROS_ROUNDTRIP_CM;
 }
+
+void switchOffMotor() {
+    if (vibrationMotorCharacteristic.value()) {
+        vibrationMotorCharacteristic.setValue(OFF);
+    }
+
+    analogWrite(VIBRATION_MOTOR_PIN, LOW);
+    isVibrating = OFF;
+    Serial.println("Vibrating OFF");
+}
+
+void switchOnMotor() {
+    if (!vibrationMotorCharacteristic.value()) {
+        vibrationMotorCharacteristic.setValue(ON);
+    }
+
+    analogWrite(VIBRATION_MOTOR_PIN, 100); // max 153, but it's way too hysterical
+    isVibrating = ON;
+    Serial.println("Vibrating ON");
+}
+
+void silentMotor() {
+    if (vibrationMotorCharacteristic.value()) {
+        vibrationMotorCharacteristic.setValue(ON);
+    }
+
+    analogWrite(VIBRATION_MOTOR_PIN, LOW);
+    isVibrating = OFF;
+    Serial.println("Vibrating OFF: Object either too close or too far");
+}
+
 void turnOnLeds() {
+    if (!ledCharacteristic.value()) {
+        ledCharacteristic.setValue(ON);
+    }
+
     digitalWrite(LED_PIN, HIGH);
     Serial.println("LEDS ON");
 }
+
 void turnOffLeds() {
+    if (ledCharacteristic.value()) {
+        ledCharacteristic.setValue(OFF);
+    }
+
     digitalWrite(LED_PIN, LOW);
     Serial.println("LEDS OFF");
 }
